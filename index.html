@@ -1,26 +1,18 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Мои облигации</title>
-
-  <!-- Telegram Mini App -->
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-
-  <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Облигации</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
-
 <body>
-
-  </header>
-
-  <nav id="menu" class="hidden">
+  <div id="menu">
     <button onclick="showBonds()">Облигации</button>
-    <button onclick="showCoupons()">Предстоящие купоны</button>
-  </nav>
+    <button onclick="showUpcoming()">Предстоящие купоны</button>
+  </div>
 
-  <main id="content"></main>
+  <div id="content"></div>
 
   <script src="app.js"></script>
 </body>
