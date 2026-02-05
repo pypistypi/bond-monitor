@@ -7,147 +7,147 @@ const SECIDS = [
 ];
 
 const content = document.getElementById("content");
-let bondsCache = [];
+const title = document.getElementById("title");
+const menu = document.getElementById("menu");
 
-function parseDate(s) {
-  return new Date(s + "T00:00:00");
-}
+document.getElementById("menuBtn").onclick = () =>
+  menu.classList.toggle("hidden");
 
-async function loadAll() {
-  const priceResp = await fetch(
+/* ================= UTIL ================= */
+
+const today = new Date();
+
+const parseDate = d => new Date(d + "T00:00:00");
+
+const daysDiff = d =>
+  (parseDate(d) - today) / 86400000;
+
+/* ================= PRICE ================= */
+
+async function loadPrices() {
+  const r = await fetch(
     "https://iss.moex.com/iss/engines/stock/markets/bonds/securities.json"
   );
-  const priceJson = await priceResp.json();
-  const pCols = priceJson.marketdata.columns;
-  const pData = priceJson.marketdata.data;
+  const j = await r.json();
 
-  const iSec = pCols.indexOf("SECID");
-  const iLast = pCols.indexOf("LAST");
+  const cols = j.marketdata.columns;
+  const data = j.marketdata.data;
 
-  const prices = {};
-  pData.forEach(r => {
-    if (SECIDS.includes(r[iSec]) && r[iLast] != null) {
-      prices[r[iSec]] = r[iLast];
-    }
-  });
+  const iSECID = cols.indexOf("SECID");
+  const iLAST = cols.indexOf("LAST");
 
-  const today = new Date();
+  const map = {};
 
-  const results = [];
+  for (const row of data) {
+    const secid = row[iSECID];
+    const last = row[iLAST];
+    if (!SECIDS.includes(secid) || last == null) continue;
+    map[secid] = Math.max(map[secid] ?? 0, last);
+  }
 
-  for (const secid of SECIDS) {
-    if (!prices[secid]) continue;
+  return map;
+}
 
-    const resp = await fetch(
-      `https://iss.moex.com/iss/securities/${secid}/bondization.json`
-    );
-    const j = await resp.json();
+/* ================= COUPON + FACE ================= */
 
-    let face = null;
-    let faceUnit = null;
+async function loadBondData(secid) {
+  const r = await fetch(
+    `https://iss.moex.com/iss/securities/${secid}/bondization.json`
+  );
+  const j = await r.json();
 
-    if (j.amortizations?.data?.length) {
-      const c = j.amortizations.columns;
-      const r = j.amortizations.data[0];
-      face = r[c.indexOf("initialfacevalue")];
-      faceUnit = r[c.indexOf("faceunit")];
-    }
+  /* ---------- FACE ---------- */
+  let face = null;
+  let faceUnit = null;
 
-    const coupons = j.coupons?.data || [];
-    const cc = j.coupons?.columns || [];
-    const iDate = cc.indexOf("coupondate");
-    const iVal = cc.indexOf("value");
+  const amort = j.amortizations?.data ?? [];
+  const coupons = j.coupons?.data ?? [];
 
-    let nextCoupon = null;
+  const faceRow =
+    amort.length ? amort[0] :
+    coupons.length ? coupons[0] : null;
+
+  if (faceRow) {
+    const cols = amort.length
+      ? j.amortizations.columns
+      : j.coupons.columns;
+
+    face = faceRow[cols.indexOf("initialfacevalue")];
+    faceUnit = faceRow[cols.indexOf("faceunit")];
+  }
+
+  /* ---------- NEXT COUPON ---------- */
+  let nextCoupon = null;
+
+  if (coupons.length) {
+    const cols = j.coupons.columns;
+    const iDate = cols.indexOf("coupondate");
+    const iVal = cols.indexOf("value");
 
     const future = coupons
       .map(r => ({
         date: r[iDate],
         value: r[iVal]
       }))
-      .filter(r =>
-        r.date &&
-        r.value != null &&
-        parseDate(r.date) >= today
-      )
-      .sort((a,b) =>
-        parseDate(a.date) - parseDate(b.date)
-      );
+      .filter(r => parseDate(r.date) >= today)
+      .sort((a,b) => parseDate(a.date) - parseDate(b.date));
 
     if (future.length) nextCoupon = future[0];
-    if (!nextCoupon) continue;
-
-    results.push({
-      secid,
-      price: prices[secid],
-      face,
-      faceUnit,
-      couponValue: nextCoupon.value,
-      couponDate: nextCoupon.date
-    });
   }
 
-  bondsCache = results;
-  showBonds();
+  return { face, faceUnit, nextCoupon };
 }
 
-function showBonds() {
+/* ================= UI ================= */
+
+async function showBonds() {
+  title.textContent = "Облигации";
+  menu.classList.add("hidden");
+  content.innerHTML = "Загрузка…";
+
+  const prices = await loadPrices();
   content.innerHTML = "";
-  bondsCache.forEach(b => {
+
+  for (const secid of SECIDS) {
+    const { face, faceUnit, nextCoupon } =
+      await loadBondData(secid);
+
     const card = document.createElement("div");
     card.className = "card";
 
     card.innerHTML = `
-      <a class="bond-title"
-         href="https://www.moex.com/ru/issue.aspx?code=${b.secid}"
-         target="_blank">
-        ${b.secid}
-      </a>
-
-      <div class="row"><span>Цена</span><b>${b.price}</b></div>
-      <div class="row"><span>Купон</span><b>${b.couponValue}</b></div>
-      <div class="row"><span>Следующий купон</span><b>${b.couponDate}</b></div>
-      <div class="muted">Номинал: ${b.face} ${b.faceUnit}</div>
+      <strong>${secid}</strong>
+      Номинал: ${face ?? "—"} ${faceUnit ?? ""}<br>
+      Цена: ${prices[secid] ?? "—"}<br>
+      Купон: ${nextCoupon?.value ?? "—"}<br>
+      Следующий купон: ${nextCoupon?.date ?? "—"}
     `;
 
     content.appendChild(card);
-  });
+  }
 }
 
-function showUpcoming() {
+async function showCoupons() {
+  title.textContent = "Предстоящие купоны";
+  menu.classList.add("hidden");
   content.innerHTML = "";
-  const today = new Date();
 
-  bondsCache
-    .filter(b => {
-      const d = parseDate(b.couponDate);
-      const diff = (d - today) / 86400000;
-      return diff >= 0 && diff <= 7;
-    })
-    .forEach(b => {
-      const card = document.createElement("div");
-      card.className = "card";
+  for (const secid of SECIDS) {
+    const { nextCoupon } = await loadBondData(secid);
+    if (!nextCoupon) continue;
 
-      card.innerHTML = `
-        <a class="bond-title"
-           href="https://www.moex.com/ru/issue.aspx?code=${b.secid}"
-           target="_blank">
-          ${b.secid}
-        </a>
+    const d = daysDiff(nextCoupon.date);
+    if (d < -7 || d > 7) continue;
 
-        <div class="row">
-          <span>Дата выплаты</span>
-          <b>${b.couponDate}</b>
-        </div>
-
-        <div class="row">
-          <span>Размер купона</span>
-          <b>${b.couponValue}</b>
-        </div>
-      `;
-
-      content.appendChild(card);
-    });
+    const card = document.createElement("div");
+    card.className = "card payout";
+    card.innerHTML = `
+      <strong>${secid}</strong>
+      Дата: ${nextCoupon.date}<br>
+      Купон: ${nextCoupon.value}
+    `;
+    content.appendChild(card);
+  }
 }
 
-loadAll();
+showBonds();
