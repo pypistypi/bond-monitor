@@ -77,26 +77,32 @@ async function loadBondData(secid) {
   }
 
   /* ---------- NEXT COUPON ---------- */
-  let nextCoupon = null;
+let nextCoupon = null;
 
-  if (coupons.length) {
-    const cols = j.coupons.columns;
-    const iDate = cols.indexOf("coupondate");
-    const iVal = cols.indexOf("value");
+if (coupons.length) {
+  const cols = j.coupons.columns;
+  const iDate = cols.indexOf("coupondate");
+  const iVal = cols.indexOf("value");
 
-    const future = coupons
-      .map(r => ({
-        date: r[iDate],
-        value: r[iVal]
-      }))
-      .filter(r => parseDate(r.date) >= today)
-      .sort((a,b) => parseDate(a.date) - parseDate(b.date));
+  const future = coupons
+    .map(r => ({
+      date: r[iDate],
+      value: r[iVal]
+    }))
+    .filter(r =>
+      r.date &&
+      r.value != null &&
+      parseDate(r.date) >= today
+    )
+    .sort((a,b) =>
+      parseDate(a.date) - parseDate(b.date)
+    );
 
-    if (future.length) nextCoupon = future[0];
+  if (future.length) {
+    nextCoupon = future[0];
   }
-
-  return { face, faceUnit, nextCoupon };
 }
+
 
 /* ================= UI ================= */
 
